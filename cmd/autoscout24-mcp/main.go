@@ -89,5 +89,10 @@ func run() error {
 	if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, io.EOF) {
 		return err
 	}
+	// With no stdin (e.g. containers) the stdio transport ends immediately; if the
+	// HTTP transport is enabled, keep serving until a shutdown signal.
+	if cfg.HTTPAddr != "" {
+		<-ctx.Done()
+	}
 	return nil
 }
