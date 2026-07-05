@@ -1,6 +1,27 @@
+<div align="center">
+
+<img src="docs/banner.svg" alt="autoscout24-mcp banner" width="100%">
+
 # autoscout24-mcp
 
-MCP server for AutoScout24 (European marketplace: autoscout24.de/.com/.it/…), written in Go. Lets LLMs search car listings, fetch full listing details, run market price analysis, and look up dealers. Data comes from the site's embedded `__NEXT_DATA__` JSON with a configurable anti-bot escalation chain: plain HTTP → Camoufox stealth browser → crw scraping service.
+**MCP server for AutoScout24 — search cars, analyze prices, and look up dealers from any LLM.**
+
+[![Go Reference](https://pkg.go.dev/badge/github.com/adambenhassen/autoscout24-mcp.svg)](https://pkg.go.dev/github.com/adambenhassen/autoscout24-mcp)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/adambenhassen/autoscout24-mcp)](go.mod)
+[![License](https://img.shields.io/github/license/adambenhassen/autoscout24-mcp)](LICENSE)
+
+</div>
+
+MCP server for [AutoScout24](https://www.autoscout24.de) (European car marketplace: `.de`, `.com`, `.it`, …), written in Go. Lets LLMs search car listings, fetch full listing details, run market price analysis, and look up dealers. Data comes from the site's embedded `__NEXT_DATA__` JSON with a configurable anti-bot escalation chain: plain HTTP → Camoufox stealth browser → crw scraping service.
+
+## Table of Contents
+
+- [Tools](#tools)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Development](#development)
+- [Contributing](#contributing)
+- [Disclaimer](#disclaimer)
 
 ## Tools
 
@@ -12,10 +33,12 @@ MCP server for AutoScout24 (European marketplace: autoscout24.de/.com/.it/…), 
 | `get_dealer` | Dealer profile (name, address, rating) and current inventory |
 | `list_makes_models` | Valid make/model names for search inputs |
 
-## Install
+## Installation
+
+Requires Go 1.26+.
 
 ```bash
-go install github.com/adam/autoscout24-mcp/cmd/autoscout24-mcp@latest
+go install github.com/adambenhassen/autoscout24-mcp/cmd/autoscout24-mcp@latest
 ```
 
 Register with Claude Code:
@@ -24,7 +47,21 @@ Register with Claude Code:
 claude mcp add autoscout24 -- autoscout24-mcp
 ```
 
+Or add to any MCP client config:
+
+```json
+{
+  "mcpServers": {
+    "autoscout24": {
+      "command": "autoscout24-mcp"
+    }
+  }
+}
+```
+
 ## Configuration
+
+All configuration is via environment variables:
 
 | Env var | Default | Meaning |
 |---------|---------|---------|
@@ -58,7 +95,11 @@ go test -tags integration -run Integration . # live-site integration tests
 golangci-lint run
 ```
 
-Parsers are tested against captured fixtures in `internal/parser/testdata/` (see its README for the documented JSON paths). Re-capture after site changes with `go run ./cmd/capture-fixtures <url> <name>.html`.
+Parsers are tested against captured fixtures in [`internal/parser/testdata/`](internal/parser/testdata/) (see its README for the documented JSON paths). Re-capture after site changes with `go run ./cmd/capture-fixtures <url> <name>.html`.
+
+## Contributing
+
+Issues and pull requests are welcome. Before opening a PR, make sure `go test ./...` and `golangci-lint run` pass.
 
 ## Disclaimer
 
