@@ -43,7 +43,8 @@ func (f *HTTPFetcher) throttle(ctx context.Context) error {
 	if next := f.last.Add(minInterval); next.After(now) {
 		wait = next.Sub(now) + time.Duration(rand.IntN(500))*time.Millisecond //nolint:gosec // politeness jitter, not security-sensitive
 	}
-	f.last = now.Add(wait) // reserve the slot before releasing the lock
+	reserved := now.Add(wait)
+	f.last = reserved // reserve the slot before releasing the lock
 	f.mu.Unlock()
 
 	if wait == 0 {
@@ -53,6 +54,14 @@ func (f *HTTPFetcher) throttle(ctx context.Context) error {
 	case <-time.After(wait):
 		return nil
 	case <-ctx.Done():
+		// Canceled before sending: release our reservation so it doesn't make
+		// later real requests wait behind a request that never happened. Only
+		// roll back if no one queued behind us in the meantime.
+		f.mu.Lock()
+		if f.last.Equal(reserved) {
+			f.last = now
+		}
+		f.mu.Unlock()
 		return ctx.Err()
 	}
 }

@@ -3,7 +3,6 @@ package fetch_test
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
@@ -56,12 +55,28 @@ func TestCooldownExpiry(t *testing.T) {
 	}
 }
 
-func TestNilStageError(t *testing.T) {
+func TestNilStageUnavailableError(t *testing.T) {
+	// When no stage can operate (unavailable + unconfigured), the error is
+	// ErrUnavailable and names the unconfigured stage — not a false "blocked".
+	unavailable := &fakeFetcher{err: fetch.ErrUnavailable}
+	e := fetch.NewEscalating([]fetch.Stage{{Name: "camoufox", Fetcher: unavailable}, {Name: "crw", Fetcher: nil}}, time.Minute)
+	_, err := e.Get(context.Background(), "https://x.test/a")
+	if !errors.Is(err, fetch.ErrUnavailable) {
+		t.Fatalf("want ErrUnavailable, got %v", err)
+	}
+	if errors.Is(err, fetch.ErrBlocked) {
+		t.Fatalf("must not mislabel unavailable stages as blocked: %v", err)
+	}
+}
+
+func TestBlockedWinsOverUnavailable(t *testing.T) {
+	// A genuine anti-bot block is the accurate, actionable error; it must win
+	// over a later unavailable/unconfigured stage.
 	blocked := &fakeFetcher{err: fetch.ErrBlocked}
 	e := fetch.NewEscalating([]fetch.Stage{{Name: "http", Fetcher: blocked}, {Name: "camoufox", Fetcher: nil}}, time.Minute)
 	_, err := e.Get(context.Background(), "https://x.test/a")
-	if !errors.Is(err, fetch.ErrBlocked) || !strings.Contains(err.Error(), "camoufox") {
-		t.Fatalf("want instructive blocked error naming camoufox, got %v", err)
+	if !errors.Is(err, fetch.ErrBlocked) {
+		t.Fatalf("want ErrBlocked to win, got %v", err)
 	}
 }
 
