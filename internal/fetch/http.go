@@ -8,35 +8,59 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"net/http/cookiejar"
+	"sync"
 	"time"
 )
 
 const userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 
+// minInterval is the minimum spacing between consecutive requests.
+const minInterval = 300 * time.Millisecond
+
 // HTTPFetcher fetches pages with plain HTTP and browser-like headers.
 type HTTPFetcher struct {
 	client *http.Client
-	last   time.Time
+
+	mu   sync.Mutex // guards last; also reserves request slots under concurrency
+	last time.Time
 }
 
-func NewHTTPFetcher() *HTTPFetcher {
+// NewHTTPFetcher builds an HTTP fetcher. A zero timeout means no client timeout.
+func NewHTTPFetcher(timeout time.Duration) *HTTPFetcher {
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		panic(err) // cookiejar.New(nil) cannot fail per its contract
 	}
-	return &HTTPFetcher{client: &http.Client{Jar: jar}}
+	return &HTTPFetcher{client: &http.Client{Jar: jar, Timeout: timeout}}
 }
 
-func (f *HTTPFetcher) Get(ctx context.Context, url string) (*Page, error) {
-	// polite jitter between consecutive requests: 300-800ms
-	if since := time.Since(f.last); since < 300*time.Millisecond {
-		select {
-		case <-time.After(300*time.Millisecond - since + time.Duration(rand.IntN(500))*time.Millisecond): //nolint:gosec // politeness jitter, not security-sensitive
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
+// throttle reserves the next polite request slot and waits for it, so
+// concurrent callers space out rather than racing on last.
+func (f *HTTPFetcher) throttle(ctx context.Context) error {
+	f.mu.Lock()
+	now := time.Now()
+	var wait time.Duration
+	if next := f.last.Add(minInterval); next.After(now) {
+		wait = next.Sub(now) + time.Duration(rand.IntN(500))*time.Millisecond //nolint:gosec // politeness jitter, not security-sensitive
 	}
-	f.last = time.Now()
+	f.last = now.Add(wait) // reserve the slot before releasing the lock
+	f.mu.Unlock()
+
+	if wait == 0 {
+		return nil
+	}
+	select {
+	case <-time.After(wait):
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (f *HTTPFetcher) Get(ctx context.Context, url string) (p *Page, err error) {
+	if terr := f.throttle(ctx); terr != nil {
+		return nil, terr
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -59,7 +83,7 @@ func (f *HTTPFetcher) Get(ctx context.Context, url string) (*Page, error) {
 	if err != nil {
 		return nil, err
 	}
-	p := &Page{URL: resp.Request.URL.String(), Status: resp.StatusCode, Body: body}
+	p = &Page{URL: resp.Request.URL.String(), Status: resp.StatusCode, Body: body}
 	switch {
 	case p.Status == http.StatusNotFound || p.Status == http.StatusGone:
 		return nil, fmt.Errorf("%s: %w", url, ErrNotFound)
@@ -87,6 +111,12 @@ func IsBlocked(p *Page) bool {
 		if bytes.Contains(p.Body, m) {
 			return true
 		}
+	}
+	// Soft block: every AutoScout24 content page embeds __NEXT_DATA__. A 200
+	// response without it is an interstitial/challenge, not real content — so
+	// escalate rather than surfacing it downstream as an opaque parse failure.
+	if p.Status == http.StatusOK && !bytes.Contains(p.Body, []byte("__NEXT_DATA__")) {
+		return true
 	}
 	return false
 }

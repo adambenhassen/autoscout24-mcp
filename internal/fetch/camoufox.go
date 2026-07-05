@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"os/exec"
 	"strings"
 	"sync"
@@ -17,7 +18,8 @@ import (
 // CamoufoxFetcher fetches pages via a Camoufox stealth browser. The camoufox
 // server sidecar is started lazily on first use and reused afterwards.
 type CamoufoxFetcher struct {
-	cmd string
+	cmd     string
+	timeout time.Duration
 
 	once    sync.Once
 	initErr error
@@ -28,11 +30,13 @@ type CamoufoxFetcher struct {
 	mu sync.Mutex // serializes page use on the single browser
 }
 
-func NewCamoufoxFetcher(cmd string) *CamoufoxFetcher {
+// NewCamoufoxFetcher builds a camoufox fetcher. timeout bounds page navigation
+// (zero means the playwright default).
+func NewCamoufoxFetcher(cmd string, timeout time.Duration) *CamoufoxFetcher {
 	if cmd == "" {
 		cmd = "uvx camoufox server"
 	}
-	return &CamoufoxFetcher{cmd: cmd}
+	return &CamoufoxFetcher{cmd: cmd, timeout: timeout}
 }
 
 func parseWSEndpoint(line string) (string, bool) {
@@ -46,6 +50,9 @@ func parseWSEndpoint(line string) (string, bool) {
 
 func (f *CamoufoxFetcher) start() error {
 	parts := strings.Fields(f.cmd)
+	if len(parts) == 0 {
+		return fmt.Errorf("%w: AS24_CAMOUFOX_CMD is empty", ErrUnavailable)
+	}
 	// context.Background: the sidecar outlives any single request; Close() terminates it
 	proc := exec.CommandContext(context.Background(), parts[0], parts[1:]...) //nolint:gosec // command comes from operator config, not user input
 	proc.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -88,10 +95,12 @@ func (f *CamoufoxFetcher) start() error {
 	return nil
 }
 
-func (f *CamoufoxFetcher) Get(ctx context.Context, url string) (*Page, error) {
+func (f *CamoufoxFetcher) Get(ctx context.Context, url string) (p *Page, err error) {
 	f.once.Do(func() { f.initErr = f.start() })
 	if f.initErr != nil {
-		return nil, fmt.Errorf("camoufox unavailable: %w (install: pip install \"camoufox[geoip]\", or set AS24_CAMOUFOX_CMD)", f.initErr)
+		// ErrUnavailable so the escalation chain moves on to the next stage
+		// instead of aborting when camoufox is not installed/configured.
+		return nil, fmt.Errorf("%w: camoufox: %w (install: pip install \"camoufox[geoip]\", or set AS24_CAMOUFOX_CMD)", ErrUnavailable, f.initErr)
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -108,7 +117,12 @@ func (f *CamoufoxFetcher) Get(ctx context.Context, url string) (*Page, error) {
 			err = cerr
 		}
 	}()
-	resp, err := page.Goto(url, playwright.PageGotoOptions{WaitUntil: playwright.WaitUntilStateDomcontentloaded})
+	gotoOpts := playwright.PageGotoOptions{WaitUntil: playwright.WaitUntilStateDomcontentloaded}
+	if f.timeout > 0 {
+		ms := float64(f.timeout.Milliseconds())
+		gotoOpts.Timeout = &ms
+	}
+	resp, err := page.Goto(url, gotoOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -128,9 +142,9 @@ func (f *CamoufoxFetcher) Get(ctx context.Context, url string) (*Page, error) {
 	if resp != nil {
 		status = resp.Status()
 	}
-	p := &Page{URL: page.URL(), Status: status, Body: []byte(html)}
+	p = &Page{URL: page.URL(), Status: status, Body: []byte(html)}
 	switch {
-	case status == 404 || status == 410:
+	case status == http.StatusNotFound || status == http.StatusGone:
 		return nil, fmt.Errorf("%s: %w", url, ErrNotFound)
 	case IsBlocked(p):
 		return nil, fmt.Errorf("%s: %w (even via camoufox)", url, ErrBlocked)

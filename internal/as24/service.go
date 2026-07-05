@@ -16,15 +16,12 @@ import (
 
 type Service struct {
 	fetcher fetch.Fetcher
-	market  string
+	market  string // market code, e.g. "de"
+	mkt     market // resolved host and path segments
 }
 
-func New(f fetch.Fetcher, market string) *Service {
-	return &Service{fetcher: f, market: market}
-}
-
-func (s *Service) baseURL() string {
-	return "https://www.autoscout24." + s.market
+func New(f fetch.Fetcher, marketCode string) *Service {
+	return &Service{fetcher: f, market: marketCode, mkt: marketFor(marketCode)}
 }
 
 // Listing fetches full details for a listing ID (GUID) or autoscout24 URL.
@@ -38,19 +35,18 @@ func (s *Service) Listing(ctx context.Context, idOrURL string) (*parser.ListingD
 		if err != nil {
 			return nil, fmt.Errorf("invalid listing url: %w", err)
 		}
-		host := strings.TrimPrefix(u.Hostname(), "www.")
-		if !strings.HasPrefix(host, "autoscout24.") {
+		if !isKnownHost(u.Hostname()) {
 			return nil, fmt.Errorf("not an autoscout24 url: %s", idOrURL)
 		}
 	} else {
 		// GUID-only URLs 308-redirect to the canonical listing URL
-		target = s.baseURL() + "/angebote/" + url.PathEscape(idOrURL)
+		target = s.mkt.host + "/" + s.mkt.listingSeg + "/" + url.PathEscape(idOrURL)
 	}
 	p, err := s.fetcher.Get(ctx, target)
 	if err != nil {
 		return nil, err
 	}
-	return parser.ParseListing(p.Body)
+	return parser.ParseListing(p.Body, s.mkt.host)
 }
 
 // Dealer fetches a dealer profile (with inventory) by autoscout24 dealer page URL or slug.
@@ -59,14 +55,22 @@ func (s *Service) Dealer(ctx context.Context, slugOrURL string) (*parser.Dealer,
 		return nil, errors.New("dealer slug or url required")
 	}
 	target := slugOrURL
-	if !strings.HasPrefix(slugOrURL, "http") {
-		target = s.baseURL() + "/haendler/" + url.PathEscape(slugOrURL)
+	if strings.HasPrefix(slugOrURL, "http") {
+		u, err := url.Parse(slugOrURL)
+		if err != nil {
+			return nil, fmt.Errorf("invalid dealer url: %w", err)
+		}
+		if !isKnownHost(u.Hostname()) {
+			return nil, fmt.Errorf("not an autoscout24 url: %s", slugOrURL)
+		}
+	} else {
+		target = s.mkt.host + "/" + s.mkt.dealerSeg + "/" + url.PathEscape(slugOrURL)
 	}
 	p, err := s.fetcher.Get(ctx, target)
 	if err != nil {
 		return nil, err
 	}
-	return parser.ParseDealer(p.Body)
+	return parser.ParseDealer(p.Body, s.mkt.host)
 }
 
 // MakesModels returns valid make names, and model names for the given make,

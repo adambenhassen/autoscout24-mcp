@@ -14,7 +14,7 @@ func TestParseListingFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d, err := parser.ParseListing(html)
+	d, err := parser.ParseListing(html, base)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +51,7 @@ func TestParseListingFixture(t *testing.T) {
 }
 
 func TestParseListingJunk(t *testing.T) {
-	if _, err := parser.ParseListing([]byte(`<script id="__NEXT_DATA__" type="application/json">{"props":{}}</script>`)); !errors.Is(err, fetch.ErrParse) {
+	if _, err := parser.ParseListing([]byte(`<script id="__NEXT_DATA__" type="application/json">{"props":{}}</script>`), base); !errors.Is(err, fetch.ErrParse) {
 		t.Fatalf("want ErrParse, got %v", err)
 	}
 }
@@ -61,7 +61,7 @@ func TestParseDealerFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d, err := parser.ParseDealer(html)
+	d, err := parser.ParseDealer(html, base)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func TestParseDealerFixture(t *testing.T) {
 }
 
 func TestParseDealerJunk(t *testing.T) {
-	if _, err := parser.ParseDealer([]byte(`<script id="__NEXT_DATA__" type="application/json">{"props":{}}</script>`)); !errors.Is(err, fetch.ErrParse) {
+	if _, err := parser.ParseDealer([]byte(`<script id="__NEXT_DATA__" type="application/json">{"props":{}}</script>`), base); !errors.Is(err, fetch.ErrParse) {
 		t.Fatalf("want ErrParse, got %v", err)
 	}
 }

@@ -77,8 +77,9 @@ type rawFormattedInt struct {
 	Raw int `json:"raw"`
 }
 
-// ParseDealer parses a /haendler dealer info page.
-func ParseDealer(html []byte) (*Dealer, error) {
+// ParseDealer parses a dealer info page. base is the market host used to
+// absolutize the dealer's inventory URLs.
+func ParseDealer(html []byte, base string) (*Dealer, error) {
 	data, err := ExtractNextData(html)
 	if err != nil {
 		return nil, err
@@ -108,7 +109,7 @@ func ParseDealer(html []byte) (*Dealer, error) {
 		r := &pp.Listings[i]
 		l := Listing{
 			ID:        r.ID,
-			URL:       absoluteURL(r.URL),
+			URL:       absoluteURL(base, r.URL),
 			Title:     strings.TrimSpace(strings.Join([]string{r.Vehicle.Make, r.Vehicle.Model, r.Vehicle.ModelVersionInput}, " ")),
 			PriceEUR:  r.Prices.Public.PriceRaw,
 			MileageKM: r.Vehicle.MileageInKm.Raw,

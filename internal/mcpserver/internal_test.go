@@ -32,7 +32,7 @@ func TestToolErrorMapping(t *testing.T) {
 
 func TestServerRegistersTools(t *testing.T) {
 	ctx := context.Background()
-	server := New(as24.New(fetch.NewHTTPFetcher(), "de"))
+	server := New(as24.New(fetch.NewHTTPFetcher(0), "de"))
 
 	st, ct := mcp.NewInMemoryTransports()
 	ss, err := server.Connect(ctx, st, nil)
