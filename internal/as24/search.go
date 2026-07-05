@@ -32,8 +32,8 @@ type SearchParams struct {
 }
 
 // BuildSearchURL renders SearchParams into an AutoScout24 /lst URL.
-func BuildSearchURL(market string, p SearchParams) string {
-	base := "https://www.autoscout24." + market + "/lst"
+func BuildSearchURL(marketCode string, p SearchParams) string {
+	base := marketFor(marketCode).host + "/lst"
 	if p.Make != "" {
 		base += "/" + slugify(p.Make)
 		if p.Model != "" {
@@ -93,7 +93,7 @@ func (s *Service) Search(ctx context.Context, p SearchParams) (*parser.SearchRes
 	if err != nil {
 		return nil, err
 	}
-	res, err := parser.ParseSearch(page.Body)
+	res, err := parser.ParseSearch(page.Body, s.mkt.host)
 	if err != nil {
 		return nil, err
 	}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/adam/autoscout24-mcp/internal/fetch"
@@ -26,7 +27,7 @@ func TestCRWFetcherOK(t *testing.T) {
 		if err := json.NewEncoder(w).Encode(map[string]any{
 			"success": true,
 			"data": map[string]any{
-				"html":     "<html>via crw</html>",
+				"html":     `<html><script id="__NEXT_DATA__">{}</script>via crw</html>`,
 				"metadata": map[string]any{"statusCode": 200, "url": "https://x.test/a"},
 			},
 		}); err != nil {
@@ -34,8 +35,8 @@ func TestCRWFetcherOK(t *testing.T) {
 		}
 	}))
 	defer srv.Close()
-	p, err := fetch.NewCRWFetcher(srv.URL, "k").Get(context.Background(), "https://x.test/a")
-	if err != nil || string(p.Body) != "<html>via crw</html>" || p.Status != 200 {
+	p, err := fetch.NewCRWFetcher(srv.URL, "k", 0).Get(context.Background(), "https://x.test/a")
+	if err != nil || !strings.Contains(string(p.Body), "via crw") || p.Status != 200 {
 		t.Fatalf("got %+v, %v", p, err)
 	}
 }
@@ -50,7 +51,7 @@ func TestCRWFetcherBlockedStatus(t *testing.T) {
 		}
 	}))
 	defer srv.Close()
-	_, err := fetch.NewCRWFetcher(srv.URL, "k").Get(context.Background(), "https://x.test/a")
+	_, err := fetch.NewCRWFetcher(srv.URL, "k", 0).Get(context.Background(), "https://x.test/a")
 	if !errors.Is(err, fetch.ErrBlocked) {
 		t.Fatalf("want ErrBlocked, got %v", err)
 	}
@@ -63,7 +64,7 @@ func TestCRWFetcherFailure(t *testing.T) {
 		}
 	}))
 	defer srv.Close()
-	if _, err := fetch.NewCRWFetcher(srv.URL, "k").Get(context.Background(), "https://x.test/a"); err == nil {
+	if _, err := fetch.NewCRWFetcher(srv.URL, "k", 0).Get(context.Background(), "https://x.test/a"); err == nil {
 		t.Fatal("want error")
 	}
 }

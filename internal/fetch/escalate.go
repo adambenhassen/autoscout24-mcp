@@ -41,17 +41,25 @@ func (e *Escalating) Get(ctx context.Context, rawURL string) (*Page, error) {
 			continue
 		}
 		if s.Fetcher == nil {
-			return nil, fmt.Errorf("%w: fallback stage %q is not configured (see README for enabling it)", ErrBlocked, s.Name)
+			// Unconfigured stage: skip it, but remember why in case nothing works.
+			lastErr = fmt.Errorf("%w: fallback stage %q is not configured (see README for enabling it)", ErrBlocked, s.Name)
+			continue
 		}
 		p, err := s.Fetcher.Get(ctx, rawURL)
 		if err == nil {
 			return p, nil
 		}
-		if !errors.Is(err, ErrBlocked) {
+		switch {
+		case errors.Is(err, ErrBlocked):
+			e.markBlocked(u.Host, s.Name)
+			lastErr = err
+		case errors.Is(err, ErrUnavailable):
+			// Stage can't operate (not installed/misconfigured): try the next one.
+			lastErr = err
+		default:
+			// Definitive answer (not found, parse failure, network): don't escalate.
 			return nil, err
 		}
-		e.markBlocked(u.Host, s.Name)
-		lastErr = err
 	}
 	if lastErr == nil {
 		lastErr = fmt.Errorf("%w: all fetch stages in cooldown", ErrBlocked)

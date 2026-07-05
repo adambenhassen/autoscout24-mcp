@@ -25,7 +25,7 @@ func main() {
 func run(url, name string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	p, err := fetch.NewHTTPFetcher().Get(ctx, url)
+	p, err := fetch.NewHTTPFetcher(0).Get(ctx, url)
 	if err != nil {
 		return err
 	}

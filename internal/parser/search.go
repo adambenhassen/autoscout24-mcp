@@ -77,8 +77,9 @@ type rawSearchPage struct {
 	} `json:"props"`
 }
 
-// ParseSearch parses a /lst search results page.
-func ParseSearch(html []byte) (*SearchResult, error) {
+// ParseSearch parses a /lst search results page. base is the market host
+// (e.g. https://www.autoscout24.it) used to absolutize relative listing URLs.
+func ParseSearch(html []byte, base string) (*SearchResult, error) {
 	data, err := ExtractNextData(html)
 	if err != nil {
 		return nil, err
@@ -101,15 +102,15 @@ func ParseSearch(html []byte) (*SearchResult, error) {
 		res.Page = p
 	}
 	for i := range pp.Listings {
-		res.Listings = append(res.Listings, mapSearchListing(&pp.Listings[i]))
+		res.Listings = append(res.Listings, mapSearchListing(&pp.Listings[i], base))
 	}
 	return res, nil
 }
 
-func mapSearchListing(r *rawSearchListing) Listing {
+func mapSearchListing(r *rawSearchListing, base string) Listing {
 	l := Listing{
 		ID:          r.ID,
-		URL:         absoluteURL(r.URL),
+		URL:         absoluteURL(base, r.URL),
 		Title:       strings.TrimSpace(strings.Join([]string{r.Vehicle.Make, r.Vehicle.Model, r.Vehicle.ModelVersionInput}, " ")),
 		PriceEUR:    r.Price.PriceRaw,
 		PriceRating: strings.TrimSpace(r.Tracking.PriceLabel),
@@ -147,9 +148,11 @@ func leadingInt(s string) int {
 	return n
 }
 
-func absoluteURL(u string) string {
+// absoluteURL turns a site-relative path into an absolute URL under base
+// (the market host). Already-absolute URLs are returned unchanged.
+func absoluteURL(base, u string) string {
 	if strings.HasPrefix(u, "/") {
-		return "https://www.autoscout24.de" + u
+		return base + u
 	}
 	return u
 }

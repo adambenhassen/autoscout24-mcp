@@ -8,7 +8,9 @@ import (
 	"time"
 )
 
-var validMarkets = []string{"de", "com", "it", "fr", "nl", "at", "be", "es"}
+// validMarkets are the supported flat-structure markets. Belgium (.be) is
+// excluded: it requires a /nl/ or /fr/ locale path prefix this scheme lacks.
+var validMarkets = []string{"de", "com", "it", "fr", "nl", "at", "es"}
 var validFetchers = []string{"http", "camoufox", "crw"}
 
 type Config struct {

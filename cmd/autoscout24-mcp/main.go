@@ -42,16 +42,16 @@ func run() error {
 	for _, name := range cfg.Fetchers {
 		switch name {
 		case "http":
-			stages = append(stages, fetch.Stage{Name: name, Fetcher: fetch.NewHTTPFetcher()})
+			stages = append(stages, fetch.Stage{Name: name, Fetcher: fetch.NewHTTPFetcher(cfg.Timeout)})
 		case "camoufox":
-			camoufox = fetch.NewCamoufoxFetcher(cfg.CamoufoxCmd)
+			camoufox = fetch.NewCamoufoxFetcher(cfg.CamoufoxCmd, cfg.Timeout)
 			stages = append(stages, fetch.Stage{Name: name, Fetcher: camoufox})
 		case "crw":
 			if cfg.CRWURL == "" {
 				stages = append(stages, fetch.Stage{Name: name, Fetcher: nil}) // unconfigured: instructive error if reached
 				continue
 			}
-			stages = append(stages, fetch.Stage{Name: name, Fetcher: fetch.NewCRWFetcher(cfg.CRWURL, cfg.CRWAPIKey)})
+			stages = append(stages, fetch.Stage{Name: name, Fetcher: fetch.NewCRWFetcher(cfg.CRWURL, cfg.CRWAPIKey, cfg.Timeout)})
 		}
 	}
 	svc := as24.New(fetch.NewEscalating(stages, blockCooldown), cfg.Market)

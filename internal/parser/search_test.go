@@ -9,6 +9,9 @@ import (
 	"github.com/adam/autoscout24-mcp/internal/parser"
 )
 
+// base is the market host the fixtures were captured from.
+const base = "https://www.autoscout24.de"
+
 func TestExtractNextDataMissing(t *testing.T) {
 	if _, err := parser.ExtractNextData([]byte("<html>no payload</html>")); !errors.Is(err, fetch.ErrParse) {
 		t.Fatal("want ErrParse")
@@ -20,7 +23,7 @@ func TestParseSearchFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := parser.ParseSearch(html)
+	res, err := parser.ParseSearch(html, base)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +55,7 @@ func TestParseSearchFixture(t *testing.T) {
 }
 
 func TestParseSearchJunk(t *testing.T) {
-	if _, err := parser.ParseSearch([]byte(`<script id="__NEXT_DATA__" type="application/json">{"props":{}}</script>`)); !errors.Is(err, fetch.ErrParse) {
+	if _, err := parser.ParseSearch([]byte(`<script id="__NEXT_DATA__" type="application/json">{"props":{}}</script>`), base); !errors.Is(err, fetch.ErrParse) {
 		t.Fatalf("want ErrParse, got %v", err)
 	}
 }

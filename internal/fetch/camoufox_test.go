@@ -2,6 +2,7 @@ package fetch_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -9,14 +10,22 @@ import (
 )
 
 func TestCamoufoxUnavailableError(t *testing.T) {
-	f := fetch.NewCamoufoxFetcher("/nonexistent/binary --definitely-missing")
+	f := fetch.NewCamoufoxFetcher("/nonexistent/binary --definitely-missing", 0)
 	_, err := f.Get(context.Background(), "https://x.test")
-	if err == nil || !strings.Contains(err.Error(), "camoufox unavailable") {
-		t.Fatalf("want unavailable error, got %v", err)
+	// ErrUnavailable so the escalation chain skips to the next stage.
+	if !errors.Is(err, fetch.ErrUnavailable) || !strings.Contains(err.Error(), "camoufox") {
+		t.Fatalf("want camoufox ErrUnavailable, got %v", err)
 	}
 	// error must be sticky (Once)
 	_, err2 := f.Get(context.Background(), "https://x.test")
-	if err2 == nil || !strings.Contains(err2.Error(), "camoufox unavailable") {
-		t.Fatalf("want sticky error, got %v", err2)
+	if !errors.Is(err2, fetch.ErrUnavailable) {
+		t.Fatalf("want sticky ErrUnavailable, got %v", err2)
+	}
+}
+
+func TestCamoufoxEmptyCmdUnavailable(t *testing.T) {
+	f := fetch.NewCamoufoxFetcher("   ", 0) // whitespace-only: must not panic
+	if _, err := f.Get(context.Background(), "https://x.test"); !errors.Is(err, fetch.ErrUnavailable) {
+		t.Fatalf("want ErrUnavailable for empty cmd, got %v", err)
 	}
 }
