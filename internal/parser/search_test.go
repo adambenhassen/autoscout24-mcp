@@ -5,8 +5,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/adam/autoscout24-mcp/internal/fetch"
-	"github.com/adam/autoscout24-mcp/internal/parser"
+	"github.com/adambenhassen/autoscout24-mcp/internal/fetch"
+	"github.com/adambenhassen/autoscout24-mcp/internal/parser"
 )
 
 // base is the market host the fixtures were captured from.

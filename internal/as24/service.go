@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/adam/autoscout24-mcp/internal/fetch"
-	"github.com/adam/autoscout24-mcp/internal/parser"
+	"github.com/adambenhassen/autoscout24-mcp/internal/fetch"
+	"github.com/adambenhassen/autoscout24-mcp/internal/parser"
 )
 
 type Service struct {

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/adam/autoscout24-mcp/internal/fetch"
+	"github.com/adambenhassen/autoscout24-mcp/internal/fetch"
 )
 
 func TestCamoufoxUnavailableError(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/adam/autoscout24-mcp/internal/config"
+	"github.com/adambenhassen/autoscout24-mcp/internal/config"
 )
 
 func TestLoadDefaults(t *testing.T) {

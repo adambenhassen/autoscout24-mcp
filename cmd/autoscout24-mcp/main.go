@@ -16,10 +16,10 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/adam/autoscout24-mcp/internal/as24"
-	"github.com/adam/autoscout24-mcp/internal/config"
-	"github.com/adam/autoscout24-mcp/internal/fetch"
-	"github.com/adam/autoscout24-mcp/internal/mcpserver"
+	"github.com/adambenhassen/autoscout24-mcp/internal/as24"
+	"github.com/adambenhassen/autoscout24-mcp/internal/config"
+	"github.com/adambenhassen/autoscout24-mcp/internal/fetch"
+	"github.com/adambenhassen/autoscout24-mcp/internal/mcpserver"
 )
 
 const blockCooldown = 10 * time.Minute
