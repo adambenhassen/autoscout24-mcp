@@ -4,7 +4,8 @@ package fetch
 import "errors"
 
 var (
-	ErrBlocked  = errors.New("blocked by anti-bot protection")
-	ErrNotFound = errors.New("not found")
-	ErrParse    = errors.New("page structure not recognized (site may have changed)")
+	ErrBlocked     = errors.New("blocked by anti-bot protection")
+	ErrNotFound    = errors.New("not found")
+	ErrParse       = errors.New("page structure not recognized (site may have changed)")
+	ErrUnavailable = errors.New("fetch stage unavailable")
 )

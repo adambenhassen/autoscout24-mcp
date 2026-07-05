@@ -14,7 +14,7 @@ import (
 func TestIntegrationLiveSite(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
-	svc := as24.New(fetch.NewHTTPFetcher(), "de")
+	svc := as24.New(fetch.NewHTTPFetcher(0), "de")
 
 	res, err := svc.Search(ctx, as24.SearchParams{Make: "BMW", Model: "320", PriceFrom: 10000, PriceTo: 30000})
 	if err != nil {

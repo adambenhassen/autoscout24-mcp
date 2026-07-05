@@ -28,12 +28,12 @@ claude mcp add autoscout24 -- autoscout24-mcp
 
 | Env var | Default | Meaning |
 |---------|---------|---------|
-| `AS24_MARKET` | `de` | Market TLD: `de`, `com`, `it`, `fr`, `nl`, `at`, `be`, `es` |
+| `AS24_MARKET` | `de` | Market TLD: `de`, `com`, `it`, `fr`, `nl`, `at`, `es` |
 | `AS24_FETCHERS` | `http,camoufox` | Ordered escalation chain; any of `http`, `camoufox`, `crw` |
 | `AS24_HTTP_ADDR` | (unset) | If set (e.g. `:8080`), also serves MCP streamable HTTP; stdio is always on |
 | `AS24_CAMOUFOX_CMD` | `uvx camoufox server` | Command to launch the Camoufox sidecar |
 | `CRW_URL` / `CRW_API_KEY` | (unset) | Firecrawl-compatible scrape API endpoint + key for the `crw` stage |
-| `AS24_TIMEOUT` | `30s` | Per-request timeout |
+| `AS24_TIMEOUT` | `30s` | Per-request timeout, applied to each fetch stage (crw is floored at 60s since rendered scrapes are slow) |
 
 Fetch stages escalate automatically on block signals (403/429, challenge pages) and remember blocks per host for 10 minutes. An unconfigured stage that is reached returns an error telling you what to enable.
 

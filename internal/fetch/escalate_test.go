@@ -65,6 +65,27 @@ func TestNilStageError(t *testing.T) {
 	}
 }
 
+func TestUnavailableStageEscalates(t *testing.T) {
+	// A stage that can't operate (ErrUnavailable) must be skipped, not abort the chain.
+	unavailable := &fakeFetcher{err: fetch.ErrUnavailable}
+	ok := &fakeFetcher{}
+	e := fetch.NewEscalating([]fetch.Stage{{Name: "camoufox", Fetcher: unavailable}, {Name: "crw", Fetcher: ok}}, time.Minute)
+	p, err := e.Get(context.Background(), "https://x.test/a")
+	if err != nil || string(p.Body) != "ok" {
+		t.Fatalf("got %v, %v", p, err)
+	}
+}
+
+func TestNilStageSkipsToNext(t *testing.T) {
+	// An unconfigured (nil) stage before a working one must be skipped.
+	ok := &fakeFetcher{}
+	e := fetch.NewEscalating([]fetch.Stage{{Name: "crw", Fetcher: nil}, {Name: "http", Fetcher: ok}}, time.Minute)
+	p, err := e.Get(context.Background(), "https://x.test/a")
+	if err != nil || string(p.Body) != "ok" {
+		t.Fatalf("got %v, %v", p, err)
+	}
+}
+
 func TestNonBlockErrorNoEscalation(t *testing.T) {
 	nf := &fakeFetcher{err: fetch.ErrNotFound}
 	next := &fakeFetcher{}

@@ -6,7 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 )
+
+// crwMinTimeout floors the crw client timeout: JS-render scrapes legitimately
+// take tens of seconds, so a small AS24_TIMEOUT should not choke them.
+const crwMinTimeout = 60 * time.Second
 
 // CRWFetcher scrapes via a Firecrawl-compatible HTTP API (crw).
 type CRWFetcher struct {
@@ -15,8 +20,13 @@ type CRWFetcher struct {
 	client  *http.Client
 }
 
-func NewCRWFetcher(baseURL, apiKey string) *CRWFetcher {
-	return &CRWFetcher{baseURL: baseURL, apiKey: apiKey, client: http.DefaultClient}
+// NewCRWFetcher builds a crw fetcher. timeout bounds each scrape (floored at
+// crwMinTimeout since rendered scrapes are slow); a zero timeout uses the floor.
+func NewCRWFetcher(baseURL, apiKey string, timeout time.Duration) *CRWFetcher {
+	if timeout < crwMinTimeout {
+		timeout = crwMinTimeout
+	}
+	return &CRWFetcher{baseURL: baseURL, apiKey: apiKey, client: &http.Client{Timeout: timeout}}
 }
 
 type crwResponse struct {
@@ -31,7 +41,7 @@ type crwResponse struct {
 	} `json:"data"`
 }
 
-func (f *CRWFetcher) Get(ctx context.Context, url string) (*Page, error) {
+func (f *CRWFetcher) Get(ctx context.Context, url string) (p *Page, err error) {
 	payload, err := json.Marshal(map[string]any{
 		"url": url, "formats": []string{"html"}, "renderJs": true,
 	})
@@ -61,7 +71,7 @@ func (f *CRWFetcher) Get(ctx context.Context, url string) (*Page, error) {
 	if !cr.Success {
 		return nil, fmt.Errorf("crw: scrape failed: %s", cr.Error)
 	}
-	p := &Page{URL: cr.Data.Metadata.URL, Status: cr.Data.Metadata.StatusCode, Body: []byte(cr.Data.HTML)}
+	p = &Page{URL: cr.Data.Metadata.URL, Status: cr.Data.Metadata.StatusCode, Body: []byte(cr.Data.HTML)}
 	if p.URL == "" {
 		p.URL = url
 	}

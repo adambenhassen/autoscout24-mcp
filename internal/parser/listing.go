@@ -96,8 +96,9 @@ type rawListingDetails struct {
 	WebPage string `json:"webPage"`
 }
 
-// ParseListing parses an /angebote listing detail page.
-func ParseListing(html []byte) (*ListingDetails, error) {
+// ParseListing parses a listing detail page. base is the market host used to
+// absolutize the listing's own URL.
+func ParseListing(html []byte, base string) (*ListingDetails, error) {
 	data, err := ExtractNextData(html)
 	if err != nil {
 		return nil, err
@@ -113,7 +114,7 @@ func ParseListing(html []byte) (*ListingDetails, error) {
 	d := &ListingDetails{
 		Listing: Listing{
 			ID:         r.ID,
-			URL:        absoluteURL(r.WebPage),
+			URL:        absoluteURL(base, r.WebPage),
 			Title:      strings.TrimSpace(strings.Join([]string{r.Vehicle.Make, r.Vehicle.Model, r.Vehicle.ModelVersionInput}, " ")),
 			PriceEUR:   r.Prices.Public.PriceRaw,
 			MileageKM:  r.Vehicle.MileageInKmRaw,
