@@ -35,14 +35,19 @@ func (e *Escalating) Get(ctx context.Context, rawURL string) (*Page, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid url %q: %w", rawURL, err)
 	}
-	var lastErr error
+	// Track blocked and unavailable failures separately: a genuine anti-bot
+	// block is the accurate, actionable error to surface, so it wins over a
+	// merely-unavailable/unconfigured stage when both occur.
+	var blockedErr, unavailErr error
 	for _, s := range e.stages {
 		if e.inCooldown(u.Host, s.Name) {
 			continue
 		}
 		if s.Fetcher == nil {
 			// Unconfigured stage: skip it, but remember why in case nothing works.
-			lastErr = fmt.Errorf("%w: fallback stage %q is not configured (see README for enabling it)", ErrBlocked, s.Name)
+			if unavailErr == nil {
+				unavailErr = fmt.Errorf("%w: fallback stage %q is not configured (see README for enabling it)", ErrUnavailable, s.Name)
+			}
 			continue
 		}
 		p, err := s.Fetcher.Get(ctx, rawURL)
@@ -52,19 +57,25 @@ func (e *Escalating) Get(ctx context.Context, rawURL string) (*Page, error) {
 		switch {
 		case errors.Is(err, ErrBlocked):
 			e.markBlocked(u.Host, s.Name)
-			lastErr = err
+			blockedErr = err
 		case errors.Is(err, ErrUnavailable):
 			// Stage can't operate (not installed/misconfigured): try the next one.
-			lastErr = err
+			if unavailErr == nil {
+				unavailErr = err
+			}
 		default:
 			// Definitive answer (not found, parse failure, network): don't escalate.
 			return nil, err
 		}
 	}
-	if lastErr == nil {
-		lastErr = fmt.Errorf("%w: all fetch stages in cooldown", ErrBlocked)
+	switch {
+	case blockedErr != nil:
+		return nil, blockedErr
+	case unavailErr != nil:
+		return nil, unavailErr
+	default:
+		return nil, fmt.Errorf("%w: all fetch stages in cooldown", ErrBlocked)
 	}
-	return nil, lastErr
 }
 
 func (e *Escalating) inCooldown(host, stage string) bool {

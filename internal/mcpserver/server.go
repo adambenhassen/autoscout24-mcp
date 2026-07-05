@@ -90,7 +90,7 @@ func New(svc *as24.Service) *mcp.Server {
 // toolError converts internal errors into actionable tool errors.
 func toolError(err error) error {
 	switch {
-	case errors.Is(err, fetch.ErrBlocked):
+	case errors.Is(err, fetch.ErrBlocked), errors.Is(err, fetch.ErrUnavailable):
 		return fmt.Errorf("%w — enable the next fallback stage: install camoufox (pip install \"camoufox[geoip]\") or configure crw (CRW_URL/CRW_API_KEY), and include it in AS24_FETCHERS", err)
 	case errors.Is(err, fetch.ErrNotFound):
 		return errors.New("listing or page no longer available on AutoScout24")
