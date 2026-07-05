@@ -15,7 +15,7 @@
     <path d="M0 285 H1280"/>
   </g>
   <!-- car silhouette -->
-  <g transform="translate(960,150)" fill="none" stroke="url(#accent)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+  <g transform="translate(980,40)" fill="none" stroke="url(#accent)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
     <path d="M0 70 h20 a30 30 0 0 1 60 0 h110 a30 30 0 0 1 60 0 h20 v-28 c0-10-8-18-18-18 l-52-8 -38-34 a20 20 0 0 0 -14-6 h-90 c-8 0-15 4-19 11 l-22 37 -10 8 c-5 4-7 9-7 15 z"/>
     <circle cx="50" cy="70" r="18"/>
     <circle cx="220" cy="70" r="18"/>
