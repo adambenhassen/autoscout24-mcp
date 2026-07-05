@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/adam/autoscout24-mcp/internal/fetch"
+	"github.com/adambenhassen/autoscout24-mcp/internal/fetch"
 )
 
 // okBody is a minimal AutoScout24-shaped page: the __NEXT_DATA__ marker keeps

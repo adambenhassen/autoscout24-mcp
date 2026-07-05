@@ -5,8 +5,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/adam/autoscout24-mcp/internal/as24"
-	"github.com/adam/autoscout24-mcp/internal/fetch"
+	"github.com/adambenhassen/autoscout24-mcp/internal/as24"
+	"github.com/adambenhassen/autoscout24-mcp/internal/fetch"
 )
 
 type stubFetcher struct {

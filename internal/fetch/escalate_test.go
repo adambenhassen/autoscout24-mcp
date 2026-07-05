@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/adam/autoscout24-mcp/internal/fetch"
+	"github.com/adambenhassen/autoscout24-mcp/internal/fetch"
 )
 
 type fakeFetcher struct {
