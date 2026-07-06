@@ -111,7 +111,7 @@ func mapSearchListing(r *rawSearchListing, base string) Listing {
 	l := Listing{
 		ID:          r.ID,
 		URL:         absoluteURL(base, r.URL),
-		Title:       strings.TrimSpace(strings.Join([]string{r.Vehicle.Make, r.Vehicle.Model, r.Vehicle.ModelVersionInput}, " ")),
+		Title:       vehicleTitle(r.Vehicle.Make, r.Vehicle.Model, r.Vehicle.ModelVersionInput),
 		PriceEUR:    r.Price.PriceRaw,
 		PriceRating: strings.TrimSpace(r.Tracking.PriceLabel),
 		FirstReg:    r.Tracking.FirstRegistration,
@@ -129,7 +129,7 @@ func mapSearchListing(r *rawSearchListing, base string) Listing {
 		}
 	}
 	if r.Location.City != "" {
-		l.Location = strings.TrimSpace(r.Location.Zip + " " + r.Location.City + ", " + r.Location.CountryCode)
+		l.Location = formatLocation(r.Location.Zip, r.Location.City, r.Location.CountryCode)
 	}
 	return l
 }
@@ -155,4 +155,31 @@ func absoluteURL(base, u string) string {
 		return base + u
 	}
 	return u
+}
+
+// vehicleTitle joins make, model, and version into a display title.
+func vehicleTitle(mk, model, version string) string {
+	return strings.TrimSpace(strings.Join([]string{mk, model, version}, " "))
+}
+
+// joinNonEmpty joins the non-empty parts with sep, so a missing component never
+// leaves a stray separator (e.g. a trailing comma when the country is absent).
+func joinNonEmpty(sep string, parts ...string) string {
+	kept := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p != "" {
+			kept = append(kept, p)
+		}
+	}
+	return strings.Join(kept, sep)
+}
+
+// formatLocation renders "ZIP City, Country", omitting empty parts.
+func formatLocation(zip, city, country string) string {
+	return joinNonEmpty(", ", strings.TrimSpace(zip+" "+city), country)
+}
+
+// formatAddress renders "Street, ZIP City, Country", omitting empty parts.
+func formatAddress(street, zip, city, country string) string {
+	return joinNonEmpty(", ", street, strings.TrimSpace(zip+" "+city), country)
 }

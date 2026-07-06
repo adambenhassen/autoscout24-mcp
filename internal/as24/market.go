@@ -36,7 +36,7 @@ func marketFor(code string) market {
 // isKnownHost reports whether host (an autoscout24 hostname, optionally with a
 // leading www.) belongs to a supported market. Used to reject arbitrary URLs.
 func isKnownHost(host string) bool {
-	host = strings.TrimPrefix(host, "www.")
+	host = strings.TrimPrefix(strings.ToLower(host), "www.")
 	for _, m := range markets {
 		if strings.TrimPrefix(strings.TrimPrefix(m.host, "https://"), "www.") == host {
 			return true

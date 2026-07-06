@@ -75,11 +75,13 @@ func (f *CRWFetcher) Get(ctx context.Context, url string) (p *Page, err error) {
 	if p.URL == "" {
 		p.URL = url
 	}
-	switch {
-	case p.Status == http.StatusNotFound || p.Status == http.StatusGone:
-		return nil, fmt.Errorf("%s: %w", url, ErrNotFound)
-	case IsBlocked(p):
-		return nil, fmt.Errorf("%s: %w (even via crw)", url, ErrBlocked)
+	if p.Status == 0 {
+		// crw reported success but omitted the upstream status; treat it as 200 so
+		// the soft-block (missing __NEXT_DATA__) check in classifyStatus applies.
+		p.Status = http.StatusOK
+	}
+	if serr := classifyStatus(p, url, " (even via crw)"); serr != nil {
+		return nil, serr
 	}
 	return p, nil
 }
