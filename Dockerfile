@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # ---- build the Go binary + fetch the matching playwright-go driver ----
 FROM golang:1.26-bookworm AS build
 WORKDIR /src
@@ -27,7 +28,7 @@ ENV PYTHONUNBUFFERED=1 \
 # libs via install-deps. camoufox runs as root: Firefox (unlike Chromium) does
 # not refuse its sandbox as root, so no extra user is needed, and `camoufox fetch`
 # can write its geoip db into site-packages.
-RUN pip install --no-cache-dir "camoufox[geoip]" "playwright<1.50" \
+RUN pip install --no-cache-dir "camoufox[geoip]" "playwright==1.49.1" \
     && playwright install-deps firefox \
     && python -m camoufox fetch \
     && rm -rf /var/lib/apt/lists/* /root/.cache/pip

@@ -20,6 +20,11 @@ import (
 // fetch transparently starts a fresh one.
 const defaultIdleTimeout = 2 * time.Minute
 
+// teardownGrace bounds how long teardown waits for the sidecar to exit after
+// SIGTERM before escalating to SIGKILL, so a wedged sidecar can never hold f.mu
+// (and thus the whole fetcher) indefinitely.
+const teardownGrace = 5 * time.Second
+
 // CamoufoxFetcher fetches pages via a Camoufox stealth browser. The camoufox
 // server sidecar is started lazily on first use, reused across fetches, and
 // reaped after idleTimeout of inactivity (restarted on the next fetch).
@@ -31,14 +36,17 @@ type CamoufoxFetcher struct {
 	mu        sync.Mutex // guards all fields below; also serializes page use
 	closed    bool       // Close() called: no further starts
 	active    bool       // a browser+sidecar is currently up
-	startedOK bool       // at least one start has succeeded
-	initErr   error      // sticky only for a first start that never succeeded
+	initErr   error      // sticky: the command could not launch (misconfig)
 	pw        *playwright.Playwright
 	browser   playwright.Browser
 	proc      *exec.Cmd
 	idleTimer *time.Timer
-	idleGen   uint64 // bumped whenever the idle timer is (re)armed or cancelled
+	idleGen   uint64 // bumped on every cancel (stopIdle); each arm captures the current value so a stale fire is ignored
 	idleReaps int    // count of idle reaps performed (observed by tests)
+
+	// startFn starts the sidecar; defaults to f.start. A field so tests can drive
+	// ensure()'s restart-vs-sticky logic without shelling out to camoufox.
+	startFn func() error
 }
 
 // NewCamoufoxFetcher builds a camoufox fetcher. timeout bounds page navigation
@@ -47,7 +55,9 @@ func NewCamoufoxFetcher(cmd string, timeout time.Duration) *CamoufoxFetcher {
 	if cmd == "" {
 		cmd = "uvx camoufox server"
 	}
-	return &CamoufoxFetcher{cmd: cmd, timeout: timeout, idleTimeout: defaultIdleTimeout}
+	f := &CamoufoxFetcher{cmd: cmd, timeout: timeout, idleTimeout: defaultIdleTimeout}
+	f.startFn = f.start
+	return f
 }
 
 func parseWSEndpoint(line string) (string, bool) {
@@ -91,7 +101,8 @@ func (f *CamoufoxFetcher) start() error {
 			// is long-lived, and if nothing reads the pipe it blocks once the OS
 			// buffer fills, stalling every later fetch.
 			// ponytail: bufio.Scanner caps a line at 64KB; camoufox log lines are
-			// short. Switch to io.Copy(io.Discard, stdout) if that ever changes.
+			// short. If that ever changes, scan until the endpoint is found, then
+			// io.Copy(io.Discard, stdout) the remainder.
 		}
 	}()
 	var endpoint string
@@ -117,18 +128,29 @@ func (f *CamoufoxFetcher) start() error {
 // ensure brings the browser up if it is not already. Callers hold f.mu.
 func (f *CamoufoxFetcher) ensure() error {
 	if f.initErr != nil {
-		return f.initErr // a first start failed (misconfig); do not respawn every fetch
+		return f.initErr // the command can't launch (misconfig); do not respawn every fetch
 	}
 	if f.active {
 		return nil
 	}
-	if err := f.start(); err != nil {
-		if !f.startedOK {
-			f.initErr = err // never worked → sticky, so the chain just skips this stage
+	if err := f.startFn(); err != nil {
+		// Reap any half-started sidecar/driver so it neither leaks nor blocks the
+		// next attempt. Capture whether the command actually launched before
+		// teardown clears f.proc.
+		launched := f.proc != nil
+		if terr := f.teardown(); terr != nil {
+			log.Printf("camoufox: cleanup after failed start: %v", terr)
 		}
-		return err // a post-reap restart failure is transient: retried on the next fetch
+		if !launched {
+			// The command could not even start (missing binary, empty cmd): mark it
+			// sticky so the chain skips the stage instead of respawning every fetch.
+			// A failure *after* launch (slow boot, connect error) is transient and
+			// retried on the next fetch.
+			f.initErr = err
+		}
+		return err
 	}
-	f.active, f.startedOK = true, true
+	f.active = true
 	return nil
 }
 
@@ -173,36 +195,58 @@ func (f *CamoufoxFetcher) onIdle(gen uint64) {
 // teardown closes the browser, driver, and sidecar and resets session state so
 // the next ensure() starts fresh. Callers hold f.mu.
 func (f *CamoufoxFetcher) teardown() error {
-	var firstErr error
+	var errs []error
 	if f.browser != nil {
-		firstErr = f.browser.Close()
+		errs = append(errs, f.browser.Close())
 		f.browser = nil
 	}
 	if f.pw != nil {
-		if err := f.pw.Stop(); err != nil && firstErr == nil {
-			firstErr = err
-		}
+		errs = append(errs, f.pw.Stop())
 		f.pw = nil
 	}
 	if f.proc != nil {
-		if f.proc.Process != nil {
-			if err := syscall.Kill(-f.proc.Process.Pid, syscall.SIGTERM); err != nil && firstErr == nil {
-				firstErr = err
-			}
-		}
-		// Reap the sidecar so it does not pile up as a zombie across reap/restart
-		// cycles. Wait returns the SIGTERM exit as an *ExitError — that is expected;
-		// only surface a real wait failure.
-		if werr := f.proc.Wait(); werr != nil {
-			var exitErr *exec.ExitError
-			if !errors.As(werr, &exitErr) && firstErr == nil {
-				firstErr = werr
-			}
-		}
+		errs = append(errs, killAndReap(f.proc, teardownGrace))
+		f.proc = nil
 	}
-	f.proc = nil
 	f.active = false
-	return firstErr
+	return errors.Join(errs...) // ignores nils; nil when everything succeeded
+}
+
+// killAndReap SIGTERMs the sidecar's whole process group and reaps it, escalating
+// to SIGKILL if it does not exit within grace so a wedged sidecar cannot block the
+// caller (which holds f.mu) indefinitely. ESRCH ("already gone") is not an error;
+// the SIGTERM/SIGKILL exit arrives from Wait as an expected *ExitError.
+func killAndReap(proc *exec.Cmd, grace time.Duration) error {
+	if proc.Process == nil {
+		return nil // never started; nothing to signal or reap
+	}
+	pgid := proc.Process.Pid
+	var errs []error
+	if err := syscall.Kill(-pgid, syscall.SIGTERM); err != nil && !errors.Is(err, syscall.ESRCH) {
+		errs = append(errs, err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- proc.Wait() }()
+	select {
+	case werr := <-done:
+		errs = append(errs, waitErr(werr))
+	case <-time.After(grace):
+		if err := syscall.Kill(-pgid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+			errs = append(errs, err)
+		}
+		errs = append(errs, waitErr(<-done))
+	}
+	return errors.Join(errs...)
+}
+
+// waitErr treats the signal-induced exit (an *exec.ExitError) as expected and
+// surfaces only a genuine wait failure.
+func waitErr(werr error) error {
+	var exitErr *exec.ExitError
+	if werr != nil && !errors.As(werr, &exitErr) {
+		return werr
+	}
+	return nil
 }
 
 func (f *CamoufoxFetcher) Get(ctx context.Context, url string) (p *Page, err error) {
