@@ -15,7 +15,7 @@ import (
 
 // New builds the MCP server with all AutoScout24 tools registered.
 func New(svc *as24.Service) *mcp.Server {
-	server := mcp.NewServer(&mcp.Implementation{Name: "autoscout24", Version: "0.1.0"}, nil)
+	server := mcp.NewServer(&mcp.Implementation{Name: "autoscout24", Version: "0.1.1"}, nil)
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "search_listings",
