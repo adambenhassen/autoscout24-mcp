@@ -3,7 +3,6 @@ package parser
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/adambenhassen/autoscout24-mcp/internal/fetch"
 )
@@ -103,14 +102,14 @@ func ParseDealer(html []byte, base string) (*Dealer, error) {
 	}
 	addr := info.CustomerAddress
 	if addr.City != "" {
-		d.Address = strings.TrimSpace(addr.Street + ", " + addr.ZipCode + " " + addr.City + ", " + addr.Country)
+		d.Address = formatAddress(addr.Street, addr.ZipCode, addr.City, addr.Country)
 	}
 	for i := range pp.Listings {
 		r := &pp.Listings[i]
 		l := Listing{
 			ID:        r.ID,
 			URL:       absoluteURL(base, r.URL),
-			Title:     strings.TrimSpace(strings.Join([]string{r.Vehicle.Make, r.Vehicle.Model, r.Vehicle.ModelVersionInput}, " ")),
+			Title:     vehicleTitle(r.Vehicle.Make, r.Vehicle.Model, r.Vehicle.ModelVersionInput),
 			PriceEUR:  r.Prices.Public.PriceRaw,
 			MileageKM: r.Vehicle.MileageInKm.Raw,
 			PowerKW:   r.Vehicle.PowerInKw.Raw,
@@ -119,7 +118,7 @@ func ParseDealer(html []byte, base string) (*Dealer, error) {
 			Gearbox:   r.Vehicle.TransmissionType.Formatted,
 		}
 		if r.Location.City != "" {
-			l.Location = strings.TrimSpace(r.Location.Zip + " " + r.Location.City + ", " + r.Location.CountryCode)
+			l.Location = formatLocation(r.Location.Zip, r.Location.City, r.Location.CountryCode)
 		}
 		d.Listings = append(d.Listings, l)
 	}

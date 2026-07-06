@@ -39,6 +39,7 @@ func NewHTTPFetcher(timeout time.Duration) *HTTPFetcher {
 func (f *HTTPFetcher) throttle(ctx context.Context) error {
 	f.mu.Lock()
 	now := time.Now()
+	prev := f.last // restore target if we roll back a canceled reservation
 	var wait time.Duration
 	if next := f.last.Add(minInterval); next.After(now) {
 		wait = next.Sub(now) + time.Duration(rand.IntN(500))*time.Millisecond //nolint:gosec // politeness jitter, not security-sensitive
@@ -56,10 +57,12 @@ func (f *HTTPFetcher) throttle(ctx context.Context) error {
 	case <-ctx.Done():
 		// Canceled before sending: release our reservation so it doesn't make
 		// later real requests wait behind a request that never happened. Only
-		// roll back if no one queued behind us in the meantime.
+		// roll back if no one queued behind us in the meantime, and restore the
+		// prior reservation (not now) — otherwise a still-pending earlier slot is
+		// lost and the next request can fire within minInterval of it.
 		f.mu.Lock()
 		if f.last.Equal(reserved) {
-			f.last = now
+			f.last = prev
 		}
 		f.mu.Unlock()
 		return ctx.Err()
@@ -93,15 +96,26 @@ func (f *HTTPFetcher) Get(ctx context.Context, url string) (p *Page, err error) 
 		return nil, err
 	}
 	p = &Page{URL: resp.Request.URL.String(), Status: resp.StatusCode, Body: body}
-	switch {
-	case p.Status == http.StatusNotFound || p.Status == http.StatusGone:
-		return nil, fmt.Errorf("%s: %w", url, ErrNotFound)
-	case IsBlocked(p):
-		return nil, fmt.Errorf("%s: %w", url, ErrBlocked)
-	case p.Status >= 400:
+	if serr := classifyStatus(p, url, ""); serr != nil {
+		return nil, serr
+	}
+	if p.Status >= 400 {
 		return nil, fmt.Errorf("%s: unexpected status %d", url, p.Status)
 	}
 	return p, nil
+}
+
+// classifyStatus maps a fetched page to a sentinel error, or nil if it looks
+// like real content. via labels the stage in the block message (e.g.
+// " (even via crw)"); pass "" for the primary stage.
+func classifyStatus(p *Page, url, via string) error {
+	switch {
+	case p.Status == http.StatusNotFound || p.Status == http.StatusGone:
+		return fmt.Errorf("%s: %w", url, ErrNotFound)
+	case IsBlocked(p):
+		return fmt.Errorf("%s: %w%s", url, ErrBlocked, via)
+	}
+	return nil
 }
 
 var blockMarkers = [][]byte{

@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"os/exec"
 	"strings"
 	"sync"
@@ -71,9 +70,16 @@ func (f *CamoufoxFetcher) start() error {
 		sc := bufio.NewScanner(stdout)
 		for sc.Scan() {
 			if ep, ok := parseWSEndpoint(sc.Text()); ok {
-				endpointCh <- ep
-				return
+				select {
+				case endpointCh <- ep: // first match; buffered, never blocks
+				default: // already delivered
+				}
 			}
+			// Keep draining stdout/stderr after the endpoint is found: the sidecar
+			// is long-lived, and if nothing reads the pipe it blocks once the OS
+			// buffer fills, stalling every later fetch.
+			// ponytail: bufio.Scanner caps a line at 64KB; camoufox log lines are
+			// short. Switch to io.Copy(io.Discard, stdout) if that ever changes.
 		}
 	}()
 	var endpoint string
@@ -87,11 +93,12 @@ func (f *CamoufoxFetcher) start() error {
 	if err != nil {
 		return fmt.Errorf("starting playwright driver: %w", err)
 	}
+	f.pw = pw // store now so Close() stops the driver even if Connect below fails
 	browser, err := pw.Firefox.Connect(endpoint)
 	if err != nil {
 		return fmt.Errorf("connecting to camoufox at %s: %w", endpoint, err)
 	}
-	f.pw, f.browser = pw, browser
+	f.browser = browser
 	return nil
 }
 
@@ -143,17 +150,18 @@ func (f *CamoufoxFetcher) Get(ctx context.Context, url string) (p *Page, err err
 		status = resp.Status()
 	}
 	p = &Page{URL: page.URL(), Status: status, Body: []byte(html)}
-	switch {
-	case status == http.StatusNotFound || status == http.StatusGone:
-		return nil, fmt.Errorf("%s: %w", url, ErrNotFound)
-	case IsBlocked(p):
-		return nil, fmt.Errorf("%s: %w (even via camoufox)", url, ErrBlocked)
+	if serr := classifyStatus(p, url, " (even via camoufox)"); serr != nil {
+		return nil, serr
 	}
 	return p, nil
 }
 
-// Close shuts down the browser connection and the camoufox sidecar.
+// Close shuts down the browser connection and the camoufox sidecar. It takes
+// f.mu so it waits for any in-flight Get() to finish instead of tearing the
+// browser down underneath it.
 func (f *CamoufoxFetcher) Close() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	var firstErr error
 	if f.browser != nil {
 		firstErr = f.browser.Close()

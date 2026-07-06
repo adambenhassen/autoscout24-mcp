@@ -3,6 +3,7 @@ package parser
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/adambenhassen/autoscout24-mcp/internal/fetch"
@@ -115,7 +116,7 @@ func ParseListing(html []byte, base string) (*ListingDetails, error) {
 		Listing: Listing{
 			ID:         r.ID,
 			URL:        absoluteURL(base, r.WebPage),
-			Title:      strings.TrimSpace(strings.Join([]string{r.Vehicle.Make, r.Vehicle.Model, r.Vehicle.ModelVersionInput}, " ")),
+			Title:      vehicleTitle(r.Vehicle.Make, r.Vehicle.Model, r.Vehicle.ModelVersionInput),
 			PriceEUR:   r.Prices.Public.PriceRaw,
 			MileageKM:  r.Vehicle.MileageInKmRaw,
 			FirstReg:   r.Vehicle.FirstRegistrationDateRaw,
@@ -147,7 +148,7 @@ func ParseListing(html []byte, base string) (*ListingDetails, error) {
 		d.Seller.Phone = r.Seller.Phones[0].FormattedNumber
 	}
 	if r.Location.City != "" {
-		d.Location = strings.TrimSpace(r.Location.Zip + " " + r.Location.City + ", " + r.Location.CountryCode)
+		d.Location = formatLocation(r.Location.Zip, r.Location.City, r.Location.CountryCode)
 	}
 	return d, nil
 }
@@ -178,5 +179,7 @@ func flattenEquipment(raw json.RawMessage) []string {
 			}
 		}
 	}
+	// byCategory is a map, so iteration order is random; sort for a stable result.
+	slices.Sort(out)
 	return out
 }

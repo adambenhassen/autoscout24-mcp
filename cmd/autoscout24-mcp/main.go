@@ -67,13 +67,15 @@ func run() error {
 		}
 	}()
 
+	httpErr := make(chan error, 1)
 	if cfg.HTTPAddr != "" {
 		handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil)
 		httpSrv := &http.Server{Addr: cfg.HTTPAddr, Handler: handler, ReadHeaderTimeout: 10 * time.Second}
 		go func() {
 			log.Printf("streamable HTTP transport on %s", cfg.HTTPAddr)
 			if serr := httpSrv.ListenAndServe(); serr != nil && !errors.Is(serr, http.ErrServerClosed) {
-				log.Printf("http server: %v", serr)
+				httpErr <- serr
+				stop() // unblock the stdio Run below so the process can exit non-zero
 			}
 		}()
 		defer func() {
@@ -90,9 +92,16 @@ func run() error {
 		return err
 	}
 	// With no stdin (e.g. containers) the stdio transport ends immediately; if the
-	// HTTP transport is enabled, keep serving until a shutdown signal.
+	// HTTP transport is enabled, keep serving until a shutdown signal — but if the
+	// HTTP server itself failed (e.g. the address was already bound), surface that
+	// error so the process exits non-zero instead of parking with no live transport.
 	if cfg.HTTPAddr != "" {
 		<-ctx.Done()
+		select {
+		case serr := <-httpErr:
+			return serr
+		default:
+		}
 	}
 	return nil
 }

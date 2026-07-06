@@ -4,7 +4,6 @@ package as24
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -26,21 +25,9 @@ func New(f fetch.Fetcher, marketCode string) *Service {
 
 // Listing fetches full details for a listing ID (GUID) or autoscout24 URL.
 func (s *Service) Listing(ctx context.Context, idOrURL string) (*parser.ListingDetails, error) {
-	if idOrURL == "" {
-		return nil, errors.New("listing id or url required")
-	}
-	target := idOrURL
-	if strings.HasPrefix(idOrURL, "http") {
-		u, err := url.Parse(idOrURL)
-		if err != nil {
-			return nil, fmt.Errorf("invalid listing url: %w", err)
-		}
-		if !isKnownHost(u.Hostname()) {
-			return nil, fmt.Errorf("not an autoscout24 url: %s", idOrURL)
-		}
-	} else {
-		// GUID-only URLs 308-redirect to the canonical listing URL
-		target = s.mkt.host + "/" + s.mkt.listingSeg + "/" + url.PathEscape(idOrURL)
+	target, err := s.resolveTarget(idOrURL, s.mkt.listingSeg, "listing", "id")
+	if err != nil {
+		return nil, err
 	}
 	p, err := s.fetcher.Get(ctx, target)
 	if err != nil {
@@ -51,26 +38,36 @@ func (s *Service) Listing(ctx context.Context, idOrURL string) (*parser.ListingD
 
 // Dealer fetches a dealer profile (with inventory) by autoscout24 dealer page URL or slug.
 func (s *Service) Dealer(ctx context.Context, slugOrURL string) (*parser.Dealer, error) {
-	if slugOrURL == "" {
-		return nil, errors.New("dealer slug or url required")
-	}
-	target := slugOrURL
-	if strings.HasPrefix(slugOrURL, "http") {
-		u, err := url.Parse(slugOrURL)
-		if err != nil {
-			return nil, fmt.Errorf("invalid dealer url: %w", err)
-		}
-		if !isKnownHost(u.Hostname()) {
-			return nil, fmt.Errorf("not an autoscout24 url: %s", slugOrURL)
-		}
-	} else {
-		target = s.mkt.host + "/" + s.mkt.dealerSeg + "/" + url.PathEscape(slugOrURL)
+	target, err := s.resolveTarget(slugOrURL, s.mkt.dealerSeg, "dealer", "slug")
+	if err != nil {
+		return nil, err
 	}
 	p, err := s.fetcher.Get(ctx, target)
 	if err != nil {
 		return nil, err
 	}
 	return parser.ParseDealer(p.Body, s.mkt.host)
+}
+
+// resolveTarget turns a raw ID/slug or a full autoscout24 URL into a fetchable
+// target. seg is the market path segment (listingSeg/dealerSeg); kind and idWord
+// name the resource in error messages ("listing"/"id", "dealer"/"slug"). A raw
+// ID/slug becomes host/seg/<escaped>, which 308-redirects to the canonical URL.
+func (s *Service) resolveTarget(idOrURL, seg, kind, idWord string) (string, error) {
+	if idOrURL == "" {
+		return "", fmt.Errorf("%s %s or url required", kind, idWord)
+	}
+	if strings.HasPrefix(idOrURL, "http") {
+		u, err := url.Parse(idOrURL)
+		if err != nil {
+			return "", fmt.Errorf("invalid %s url: %w", kind, err)
+		}
+		if !isKnownHost(u.Hostname()) {
+			return "", fmt.Errorf("not an autoscout24 url: %s", idOrURL)
+		}
+		return idOrURL, nil
+	}
+	return s.mkt.host + "/" + seg + "/" + url.PathEscape(idOrURL), nil
 }
 
 // MakesModels returns valid make names, and model names for the given make,
