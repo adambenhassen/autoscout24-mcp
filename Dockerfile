@@ -43,8 +43,15 @@ exec python -c "from camoufox.server import launch_server; from camoufox.addons 
 EOF
 RUN chmod +x /usr/local/bin/camoufox-server
 
+# tini as PID 1 to reap zombies. When the idle timer reaps the camoufox sidecar,
+# its node/firefox grandchildren reparent to PID 1; the Go server does not reap
+# them, so without an init they pile up as zombies across reap/restart cycles.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tini \
+    && rm -rf /var/lib/apt/lists/*
+
 # playwright-go driver (1.49.1), where playwright.Run() looks for it at runtime.
 COPY --from=build /root/.cache/ms-playwright-go /root/.cache/ms-playwright-go
 COPY --from=build /autoscout24-mcp /usr/local/bin/autoscout24-mcp
 
-ENTRYPOINT ["autoscout24-mcp"]
+ENTRYPOINT ["tini", "--", "autoscout24-mcp"]
