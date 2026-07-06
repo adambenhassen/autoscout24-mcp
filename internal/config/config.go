@@ -11,15 +11,13 @@ import (
 // validMarkets are the supported flat-structure markets. Belgium (.be) is
 // excluded: it requires a /nl/ or /fr/ locale path prefix this scheme lacks.
 var validMarkets = []string{"de", "com", "it", "fr", "nl", "at", "es"}
-var validFetchers = []string{"http", "camoufox", "crw"}
+var validFetchers = []string{"http", "camoufox"}
 
 type Config struct {
 	Market      string
 	Fetchers    []string
 	HTTPAddr    string
 	CamoufoxCmd string
-	CRWURL      string
-	CRWAPIKey   string
 	Timeout     time.Duration
 }
 
@@ -29,8 +27,6 @@ func Load(getenv func(string) string) (Config, error) {
 		Fetchers:    []string{"http", "camoufox"},
 		HTTPAddr:    getenv("AS24_HTTP_ADDR"),
 		CamoufoxCmd: getenv("AS24_CAMOUFOX_CMD"),
-		CRWURL:      getenv("CRW_URL"),
-		CRWAPIKey:   getenv("CRW_API_KEY"),
 		Timeout:     30 * time.Second,
 	}
 	if m := getenv("AS24_MARKET"); m != "" {

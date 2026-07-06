@@ -37,18 +37,17 @@ func TestLoadRejectsBadFetcher(t *testing.T) {
 func TestLoadOverrides(t *testing.T) {
 	env := map[string]string{
 		"AS24_MARKET":   "it",
-		"AS24_FETCHERS": "http,crw",
+		"AS24_FETCHERS": "camoufox,http",
 		"AS24_TIMEOUT":  "5s",
-		"CRW_URL":       "http://localhost:3002",
 	}
 	cfg, err := config.Load(func(k string) string { return env[k] })
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Market != "it" || cfg.Timeout != 5*time.Second || cfg.CRWURL != "http://localhost:3002" {
+	if cfg.Market != "it" || cfg.Timeout != 5*time.Second {
 		t.Fatalf("bad overrides: %+v", cfg)
 	}
-	if len(cfg.Fetchers) != 2 || cfg.Fetchers[1] != "crw" {
+	if len(cfg.Fetchers) != 2 || cfg.Fetchers[0] != "camoufox" || cfg.Fetchers[1] != "http" {
 		t.Fatalf("bad fetchers: %v", cfg.Fetchers)
 	}
 }

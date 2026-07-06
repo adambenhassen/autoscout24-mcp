@@ -46,12 +46,6 @@ func run() error {
 		case "camoufox":
 			camoufox = fetch.NewCamoufoxFetcher(cfg.CamoufoxCmd, cfg.Timeout)
 			stages = append(stages, fetch.Stage{Name: name, Fetcher: camoufox})
-		case "crw":
-			if cfg.CRWURL == "" {
-				stages = append(stages, fetch.Stage{Name: name, Fetcher: nil}) // unconfigured: instructive error if reached
-				continue
-			}
-			stages = append(stages, fetch.Stage{Name: name, Fetcher: fetch.NewCRWFetcher(cfg.CRWURL, cfg.CRWAPIKey, cfg.Timeout)})
 		}
 	}
 	svc := as24.New(fetch.NewEscalating(stages, blockCooldown), cfg.Market)

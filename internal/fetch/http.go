@@ -107,7 +107,7 @@ func (f *HTTPFetcher) Get(ctx context.Context, url string) (p *Page, err error) 
 
 // classifyStatus maps a fetched page to a sentinel error, or nil if it looks
 // like real content. via labels the stage in the block message (e.g.
-// " (even via crw)"); pass "" for the primary stage.
+// " (even via camoufox)"); pass "" for the primary stage.
 func classifyStatus(p *Page, url, via string) error {
 	switch {
 	case p.Status == http.StatusNotFound || p.Status == http.StatusGone:

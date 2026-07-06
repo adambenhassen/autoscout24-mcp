@@ -12,7 +12,7 @@
 
 </div>
 
-MCP server for [AutoScout24](https://www.autoscout24.de) (European car marketplace: `.de`, `.com`, `.it`, …), written in Go. Lets LLMs search car listings, fetch full listing details, run market price analysis, and look up dealers. Data comes from the site's embedded `__NEXT_DATA__` JSON with a configurable anti-bot escalation chain: plain HTTP → Camoufox stealth browser → crw scraping service.
+MCP server for [AutoScout24](https://www.autoscout24.de) (European car marketplace: `.de`, `.com`, `.it`, …), written in Go. Lets LLMs search car listings, fetch full listing details, run market price analysis, and look up dealers. Data comes from the site's embedded `__NEXT_DATA__` JSON with a configurable anti-bot escalation chain: plain HTTP → Camoufox stealth browser.
 
 ## Table of Contents
 
@@ -59,6 +59,20 @@ Or add to any MCP client config:
 }
 ```
 
+### Docker
+
+A container image with the Camoufox stealth browser baked in is published to GHCR — Python, camoufox (its patched Firefox), and the Playwright driver are all bundled, so the `http → camoufox` escalation chain works out of the box:
+
+```bash
+# streamable HTTP transport
+docker run --rm -e AS24_HTTP_ADDR=:8080 -p 8080:8080 ghcr.io/adambenhassen/autoscout24-mcp
+
+# stdio transport (for an MCP client that spawns the container)
+docker run --rm -i ghcr.io/adambenhassen/autoscout24-mcp
+```
+
+Configure it with the same `AS24_*` environment variables as below.
+
 ## Configuration
 
 All configuration is via environment variables:
@@ -66,11 +80,10 @@ All configuration is via environment variables:
 | Env var | Default | Meaning |
 |---------|---------|---------|
 | `AS24_MARKET` | `de` | Market TLD: `de`, `com`, `it`, `fr`, `nl`, `at`, `es` |
-| `AS24_FETCHERS` | `http,camoufox` | Ordered escalation chain; any of `http`, `camoufox`, `crw` |
+| `AS24_FETCHERS` | `http,camoufox` | Ordered escalation chain; any of `http`, `camoufox` |
 | `AS24_HTTP_ADDR` | (unset) | If set (e.g. `:8080`), also serves MCP streamable HTTP; stdio is always on |
 | `AS24_CAMOUFOX_CMD` | `uvx camoufox server` | Command to launch the Camoufox sidecar |
-| `CRW_URL` / `CRW_API_KEY` | (unset) | Firecrawl-compatible scrape API endpoint + key for the `crw` stage |
-| `AS24_TIMEOUT` | `30s` | Per-request timeout, applied to each fetch stage (crw is floored at 60s since rendered scrapes are slow) |
+| `AS24_TIMEOUT` | `30s` | Per-request timeout, applied to each fetch stage |
 
 Fetch stages escalate automatically on block signals (403/429, challenge pages) and remember blocks per host for 10 minutes. An unconfigured stage that is reached returns an error telling you what to enable.
 
@@ -82,10 +95,6 @@ python -m camoufox fetch   # downloads the stealth browser
 ```
 
 The server launches `camoufox server` lazily on the first blocked request and reuses one browser instance. Override the launch command with `AS24_CAMOUFOX_CMD`.
-
-### Enabling crw
-
-Point `CRW_URL` (and `CRW_API_KEY` if required) at any Firecrawl-compatible `/v1/scrape` endpoint and add `crw` to `AS24_FETCHERS`, e.g. `AS24_FETCHERS=http,camoufox,crw`.
 
 ## Development
 
