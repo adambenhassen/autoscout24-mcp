@@ -20,14 +20,15 @@ FROM python:3.14-slim-trixie
 ENV PYTHONUNBUFFERED=1 \
     AS24_CAMOUFOX_CMD="/usr/local/bin/camoufox-server"
 
-# camoufox (a patched Firefox) plus its browser + geoip data. Pin playwright to
-# 1.60.0 to match the playwright-go driver above — the go/python playwright
-# versions must be identical or Connect fails with a version-mismatch handshake.
-# The playwright CLI apt-installs the Firefox system libs via install-deps.
-# camoufox runs as root: Firefox (unlike Chromium) does not refuse its sandbox as
-# root, so no extra user is needed, and `camoufox fetch` can write its geoip db
-# into site-packages.
-RUN pip install --no-cache-dir "camoufox[geoip]" "playwright==1.60.0" \
+# camoufox (a patched Firefox) plus its browser + geoip data. camoufox is pinned
+# for reproducible builds; its pyproject caps playwright at <1.61. playwright is
+# pinned to 1.60.0 to match the playwright-go driver above — the go/python
+# playwright versions must be identical or Connect fails with a version-mismatch
+# handshake. The playwright CLI apt-installs the Firefox system libs via
+# install-deps. camoufox runs as root: Firefox (unlike Chromium) does not refuse
+# its sandbox as root, so no extra user is needed, and `camoufox fetch` can write
+# its geoip db into site-packages.
+RUN pip install --no-cache-dir "camoufox[geoip]==0.4.11" "playwright==1.60.0" \
     && playwright install-deps firefox \
     && python -m camoufox fetch \
     && rm -rf /var/lib/apt/lists/* /root/.cache/pip
