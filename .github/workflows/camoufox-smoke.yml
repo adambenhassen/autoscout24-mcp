@@ -1,0 +1,30 @@
+name: camoufox-smoke
+
+# Heavy, live-ish check kept off the per-push path: builds the image and runs a
+# real camoufox Connect (launch sidecar + playwright-go driver + navigate). This
+# is what catches a Go/python/browser version skew that unit tests can't see.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * 1' # Mondays 06:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  camoufox-connect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Build smoke image (amd64, reuse the release build cache)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          target: smoke
+          load: true
+          tags: autoscout24-mcp:smoke
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache
+      - name: camoufox connect check
+        run: docker run --rm autoscout24-mcp:smoke

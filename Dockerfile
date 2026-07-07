@@ -14,9 +14,11 @@ RUN go mod download
 RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 go run github.com/playwright-community/playwright-go/cmd/playwright@v0.6000.0 install firefox
 COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /autoscout24-mcp ./cmd/autoscout24-mcp
+# camoufox-smoke: a one-shot connect check used only by the smoke image stage.
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /camoufox-smoke ./cmd/camoufox-smoke
 
 # ---- runtime: python + camoufox stealth browser + the driver + the binary ----
-FROM python:3.14-slim-trixie
+FROM python:3.14-slim-trixie AS runtime
 ENV PYTHONUNBUFFERED=1 \
     AS24_CAMOUFOX_CMD="/usr/local/bin/camoufox-server"
 
@@ -56,3 +58,12 @@ COPY --from=build /root/.cache/ms-playwright-go /root/.cache/ms-playwright-go
 COPY --from=build /autoscout24-mcp /usr/local/bin/autoscout24-mcp
 
 ENTRYPOINT ["tini", "--", "autoscout24-mcp"]
+
+# ---- CI-only target: prove camoufox actually connects (not shipped to prod) ----
+# Extends the runtime image with the smoke binary. Build with `--target smoke`
+# and run it: it launches the camoufox sidecar, connects the playwright-go driver,
+# and navigates a page — a real Connect that fails on a Go/python/browser version
+# skew. The default (release) build targets `runtime`, so this never ships.
+FROM runtime AS smoke
+COPY --from=build /camoufox-smoke /usr/local/bin/camoufox-smoke
+ENTRYPOINT ["tini", "--", "camoufox-smoke"]
