@@ -4,14 +4,14 @@ FROM golang:1.26-trixie AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
-# Download the playwright-go driver (node + playwright 1.60.0) so the runtime can
+# Download the playwright-go driver (node + playwright 1.49.1) so the runtime can
 # start playwright and connect to the camoufox browser. The version MUST match
-# the go.mod playwright-go dependency (v0.6000.0 → driver 1.60.0) AND the runtime
+# the go.mod playwright-go dependency (v0.4902.0 → driver 1.49.1) AND the runtime
 # python playwright below: playwright refuses a Connect across a version skew.
 # PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD keeps this to the driver only — we connect to
 # camoufox's own patched Firefox, never a plain Playwright browser.
 # Ordered before `COPY . .` so a source change doesn't bust this (slow) layer.
-RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 go run github.com/playwright-community/playwright-go/cmd/playwright@v0.6000.0 install firefox
+RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 go run github.com/playwright-community/playwright-go/cmd/playwright@v0.4902.0 install firefox
 COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /autoscout24-mcp ./cmd/autoscout24-mcp
 # camoufox-smoke: a one-shot connect check used only by the smoke image stage.
@@ -22,15 +22,17 @@ FROM python:3.14-slim-trixie AS runtime
 ENV PYTHONUNBUFFERED=1 \
     AS24_CAMOUFOX_CMD="/usr/local/bin/camoufox-server"
 
-# camoufox (a patched Firefox) plus its browser + geoip data. camoufox is pinned
-# for reproducible builds; its pyproject caps playwright at <1.61. playwright is
-# pinned to 1.60.0 to match the playwright-go driver above — the go/python
-# playwright versions must be identical or Connect fails with a version-mismatch
-# handshake. The playwright CLI apt-installs the Firefox system libs via
-# install-deps. camoufox runs as root: Firefox (unlike Chromium) does not refuse
-# its sandbox as root, so no extra user is needed, and `camoufox fetch` can write
-# its geoip db into site-packages.
-RUN pip install --no-cache-dir "camoufox[geoip]==0.4.11" "playwright==1.60.0" \
+# camoufox (a patched Firefox, pinned for reproducible builds) plus its browser +
+# geoip data. Pin playwright to 1.49.1: it must match the playwright-go driver
+# above (identical version or Connect fails a version handshake), and 1.49.1 is
+# the last line whose node driver still ships lib/browserServerImpl.js, which
+# camoufox 0.4.11's server launcher requires — playwright 1.50+ removed it, and a
+# CI smoke build confirmed camoufox won't even launch under 1.60. (Newer camoufox
+# needs a newer playwright, but it's git-only, not on PyPI.) The playwright CLI
+# apt-installs the Firefox system libs via install-deps. camoufox runs as root:
+# Firefox (unlike Chromium) does not refuse its sandbox as root, so no extra user
+# is needed, and `camoufox fetch` can write its geoip db into site-packages.
+RUN pip install --no-cache-dir "camoufox[geoip]==0.4.11" "playwright==1.49.1" \
     && playwright install-deps firefox \
     && python -m camoufox fetch \
     && rm -rf /var/lib/apt/lists/* /root/.cache/pip
@@ -53,7 +55,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends tini \
     && rm -rf /var/lib/apt/lists/*
 
-# playwright-go driver (1.60.0), where playwright.Run() looks for it at runtime.
+# playwright-go driver (1.49.1), where playwright.Run() looks for it at runtime.
 COPY --from=build /root/.cache/ms-playwright-go /root/.cache/ms-playwright-go
 COPY --from=build /autoscout24-mcp /usr/local/bin/autoscout24-mcp
 
