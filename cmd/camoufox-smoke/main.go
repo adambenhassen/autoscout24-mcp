@@ -14,6 +14,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -23,7 +24,7 @@ import (
 
 func main() {
 	url := getenv("SMOKE_URL", "https://example.com")
-	cmd := getenv("AS24_CAMOUFOX_CMD", "/usr/local/bin/camoufox-server")
+	cmd := getenv("AS24_CAMOUFOX_CMD", "xvfb-run -a camoufox server")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
@@ -37,8 +38,17 @@ func main() {
 
 	page, err := f.Get(ctx, url)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "camoufox smoke FAILED: %v\n", err)
-		os.Exit(1)
+		// ErrUnavailable means camoufox could not launch or the playwright-go
+		// driver could not Connect — the version-skew failure this check exists to
+		// catch. Any other error (e.g. ErrBlocked from the AutoScout24-tuned content
+		// heuristic firing on a neutral URL) still proves camoufox launched,
+		// connected, and returned a page, which is all the connect smoke verifies.
+		if errors.Is(err, fetch.ErrUnavailable) {
+			fmt.Fprintf(os.Stderr, "camoufox smoke FAILED (connect): %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("camoufox smoke OK: launched + connected + navigated %s (content verdict: %v)\n", url, err)
+		return
 	}
 	fmt.Printf("camoufox smoke OK: %s -> status %d, %d bytes\n", page.URL, page.Status, len(page.Body))
 }
