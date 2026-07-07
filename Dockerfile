@@ -4,15 +4,16 @@ FROM golang:1.26-trixie AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /autoscout24-mcp ./cmd/autoscout24-mcp
 # Download the playwright-go driver (node + playwright 1.60.0) so the runtime can
 # start playwright and connect to the camoufox browser. The version MUST match
 # the go.mod playwright-go dependency (v0.6000.0 → driver 1.60.0) AND the runtime
 # python playwright below: playwright refuses a Connect across a version skew.
 # PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD keeps this to the driver only — we connect to
 # camoufox's own patched Firefox, never a plain Playwright browser.
+# Ordered before `COPY . .` so a source change doesn't bust this (slow) layer.
 RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 go run github.com/playwright-community/playwright-go/cmd/playwright@v0.6000.0 install firefox
+COPY . .
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /autoscout24-mcp ./cmd/autoscout24-mcp
 
 # ---- runtime: python + camoufox stealth browser + the driver + the binary ----
 FROM python:3.14-slim-trixie
