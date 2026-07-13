@@ -41,7 +41,7 @@ func TestE2ESmoke(t *testing.T) {
 	if err := srv.Start(); err != nil {
 		t.Fatalf("start server: %v", err)
 	}
-	t.Cleanup(func() { stopProcess(srv) })
+	t.Cleanup(func() { stopProcess(t, srv) })
 
 	waitPort(t, addr)
 
@@ -53,7 +53,11 @@ func TestE2ESmoke(t *testing.T) {
 	if err != nil {
 		t.Fatalf("mcp connect %s: %v", endpoint, err)
 	}
-	defer func() { _ = cs.Close() }()
+	defer func() {
+		if cerr := cs.Close(); cerr != nil {
+			t.Errorf("close mcp session: %v", cerr)
+		}
+	}()
 
 	res, err := cs.ListTools(ctx, nil)
 	if err != nil {
@@ -84,7 +88,11 @@ func freeAddr(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = l.Close() }()
+	defer func() {
+		if cerr := l.Close(); cerr != nil {
+			t.Logf("close reservation listener: %v", cerr)
+		}
+	}()
 	return l.Addr().String()
 }
 
@@ -94,7 +102,9 @@ func waitPort(t *testing.T, addr string) {
 	for time.Now().Before(deadline) {
 		c, err := net.DialTimeout("tcp", addr, time.Second)
 		if err == nil {
-			_ = c.Close()
+			if cerr := c.Close(); cerr != nil {
+				t.Logf("close probe connection: %v", cerr)
+			}
 			return
 		}
 		time.Sleep(150 * time.Millisecond)
@@ -102,14 +112,28 @@ func waitPort(t *testing.T, addr string) {
 	t.Fatalf("server never listened on %s", addr)
 }
 
-func stopProcess(srv *exec.Cmd) {
-	_ = srv.Process.Signal(os.Interrupt)
-	done := make(chan struct{})
-	go func() { _ = srv.Wait(); close(done) }()
+// stopProcess sends SIGINT and asserts the server honors the container shutdown
+// contract: it exits (rather than parking with the stdio transport closed but
+// HTTP live) and exits cleanly. A server that ignores SIGINT or exits non-zero
+// on graceful shutdown is a regression, so this fails the test rather than
+// silently papering over it with the kill fallback.
+func stopProcess(t *testing.T, srv *exec.Cmd) {
+	t.Helper()
+	if err := srv.Process.Signal(os.Interrupt); err != nil {
+		t.Errorf("signal server (already exited or crashed mid-test?): %v", err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- srv.Wait() }()
 	select {
-	case <-done:
+	case err := <-done:
+		if err != nil {
+			t.Errorf("server exited non-zero after SIGINT: %v", err)
+		}
 	case <-time.After(5 * time.Second):
-		_ = srv.Process.Kill()
+		t.Errorf("server ignored SIGINT for 5s; killing (shutdown regression)")
+		if kerr := srv.Process.Kill(); kerr != nil {
+			t.Errorf("kill server: %v", kerr)
+		}
 		<-done
 	}
 }

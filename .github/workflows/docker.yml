@@ -31,6 +31,23 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest
 
+      # Gate the release on a real camoufox Connect from the tagged commit: build
+      # the smoke target (which shares every layer with runtime) and run it before
+      # pushing, so a version skew or a browser stack that builds but can't launch
+      # never ships as :latest. The runtime push below reuses these cached layers.
+      - name: Build smoke image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          target: smoke
+          load: true
+          tags: autoscout24-mcp:smoke
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache,mode=max
+      - name: camoufox connect check
+        run: docker run --rm autoscout24-mcp:smoke
+
       - uses: docker/build-push-action@v7
         with:
           context: .

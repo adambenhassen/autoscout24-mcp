@@ -17,7 +17,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - run: go vet ./...
+      # Vet the build-tagged files too (e2e_test.go, integration_test.go), so a
+      # rename/signature break in them is caught here instead of rotting until
+      # someone runs the tagged build by hand.
+      - run: go vet -tags "e2e integration" ./...
       - run: go test -race ./...
 
   e2e-smoke:
@@ -30,4 +33,6 @@ jobs:
           cache: true
       # Builds the binary, boots it with stdin closed + HTTP transport, and
       # drives a real MCP handshake. No live AutoScout24 calls, so no flake.
-      - run: go test -tags e2e -run TestE2ESmoke -v .
+      # No -run filter: `go test -run X` exits 0 when X matches nothing, so a
+      # rename would silently turn this into a green no-op — run every e2e test.
+      - run: go test -tags e2e -v .
